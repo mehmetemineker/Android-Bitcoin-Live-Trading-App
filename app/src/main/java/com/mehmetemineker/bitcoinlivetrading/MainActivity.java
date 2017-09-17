@@ -1,7 +1,12 @@
 package com.mehmetemineker.bitcoinlivetrading;
 
+import android.content.Context;
+import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.content.ContextCompat;
@@ -18,7 +23,11 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.google.android.gms.ads.AdListener;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.InterstitialAd;
 import com.pusher.android.PusherAndroid;
 import com.pusher.client.channel.Channel;
 import com.pusher.client.channel.SubscriptionEventListener;
@@ -29,6 +38,8 @@ import org.json.JSONObject;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -54,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isFisrtLoad;
 
+    private InterstitialAd mInterstitialAd;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -78,30 +91,43 @@ public class MainActivity extends AppCompatActivity {
         textViewChannel.setVisibility(View.GONE);
         progressBar.setVisibility(View.VISIBLE);
 
-        BitstampPusherConnect();
-        BitfinexWebSocketConnect();
-        GdaxWebSocketConnect();
+
+        if(isNetworkConnected()){
+            bitstampPusherConnect();
+            bitfinexWebSocketConnect();
+            gdaxWebSocketConnect();
+
+            mInterstitialAd = newInterstitialAd();
+            loadInterstitial();
+
+            Handler handler = new Handler();
+            handler.postDelayed(new Runnable() {
+                public void run() {
+                    showInterstitial();
+                }
+            }, 1000);
+        }else{
+            progressBar.setVisibility(View.GONE);
+            textViewChannel.setVisibility(View.VISIBLE);
+            textViewChannel.setText("Oppss! İnternetler kesik!");
+        }
     }
 
-    private void SetTextViewsVisible(){
+    private void setTextViewsVisible(){
         textViewPrice.setVisibility(View.VISIBLE);
-        textViewChange.setVisibility(View.VISIBLE);
+        textViewChange.setVisibility(View.GONE);
         textViewChannel.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
     }
 
-    private void SetPriceChangeValue(double newPriceValue){
+    private void setPriceChangeValue(double newPriceValue){
+        /*
         if(isFisrtLoad){
             lastPriceValue = newPriceValue;
             isFisrtLoad = false;
         }
 
-        Log.w("newPriceValue: ", String.valueOf(newPriceValue));
-        Log.w("lastPriceValue: ", String.valueOf(lastPriceValue));
-
-
         double rate = (newPriceValue - lastPriceValue) * 100 / lastPriceValue;
-
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             Window window = getWindow();
@@ -124,18 +150,15 @@ public class MainActivity extends AppCompatActivity {
             main_view.setBackgroundColor(ContextCompat.getColor(this, R.color.colorPrimary));
         }
 
-
-
-
-        Log.w("rate: ", String.valueOf(rate));
-
         rate = Math.abs(rate);
         textViewChange.setText(formatterRate.format(rate));
 
         lastPriceValue = newPriceValue;
+
+        */
     }
 
-    private void BitfinexWebSocketConnect(){
+    private void bitfinexWebSocketConnect(){
         Request request = new Request.Builder().url("wss://api.bitfinex.com/ws/2").build();
 
         WebSocket ws = clientBitfinex.newWebSocket(request, new WebSocketListener() {
@@ -158,8 +181,8 @@ public class MainActivity extends AppCompatActivity {
                                 textViewPrice.setText(formatterPrice.format(price));
                                 textViewChannel.setText(getString(R.string.bitfinex));
 
-                                SetPriceChangeValue(price);
-                                SetTextViewsVisible();
+                                setPriceChangeValue(price);
+                                setTextViewsVisible();
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
@@ -187,7 +210,7 @@ public class MainActivity extends AppCompatActivity {
         clientBitfinex.dispatcher().executorService().shutdown();
     }
 
-    private void GdaxWebSocketConnect(){
+    private void gdaxWebSocketConnect(){
         Request request = new Request.Builder().url("wss://ws-feed.gdax.com").build();
 
         WebSocket ws = clientGdax.newWebSocket(request, new WebSocketListener() {
@@ -209,8 +232,8 @@ public class MainActivity extends AppCompatActivity {
                                 textViewPrice.setText(formatterPrice.format(price));
                                 textViewChannel.setText(getString(R.string.gdax));
 
-                                SetPriceChangeValue(price);
-                                SetTextViewsVisible();
+                                setPriceChangeValue(price);
+                                setTextViewsVisible();
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
@@ -238,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
         clientGdax.dispatcher().executorService().shutdown();
     }
 
-    private void BitstampPusherConnect(){
+    private void bitstampPusherConnect(){
         PusherAndroid pusher = new PusherAndroid("de504dc5763aeef9ff52");
         Channel channel = pusher.subscribe("live_trades");
 
@@ -255,8 +278,8 @@ public class MainActivity extends AppCompatActivity {
                             textViewPrice.setText(formatterPrice.format(price));
                             textViewChannel.setText(getString(R.string.bitstamp));
 
-                            SetPriceChangeValue(price);
-                            SetTextViewsVisible();
+                            setPriceChangeValue(price);
+                            setTextViewsVisible();
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
@@ -267,4 +290,46 @@ public class MainActivity extends AppCompatActivity {
 
         pusher.connect();
     }
+
+    private boolean isNetworkConnected() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+
+        return cm.getActiveNetworkInfo() != null;
+    }
+
+    private void showInterstitial() {
+        if (mInterstitialAd != null && mInterstitialAd.isLoaded()) {
+            mInterstitialAd.show();
+        }
+    }
+
+    private InterstitialAd newInterstitialAd() {
+        InterstitialAd interstitialAd = new InterstitialAd(this);
+        interstitialAd.setAdUnitId(getString(R.string.interstitial_ad_unit_id));
+        interstitialAd.setAdListener(new AdListener() {
+            @Override
+            public void onAdLoaded() {
+
+            }
+
+            @Override
+            public void onAdFailedToLoad(int errorCode) {
+
+            }
+
+            @Override
+            public void onAdClosed() {
+
+            }
+        });
+
+        return interstitialAd;
+    }
+
+    private void loadInterstitial() {
+        AdRequest adRequest = new AdRequest.Builder()
+                .setRequestAgent("android_studio:ad_template").build();
+        mInterstitialAd.loadAd(adRequest);
+    }
+
 }
